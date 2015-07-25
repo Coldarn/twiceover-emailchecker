@@ -17,7 +17,8 @@ namespace EmailChecker
                 return -1;
             }
 
-            SearchResultCollection results = GetUser(String.Join(" ", args));
+            bool getCurrentUser = args[0] == "--getCurrentUser";
+            SearchResultCollection results = FindUsers(getCurrentUser ? Environment.UserName : String.Join(" ", args), getCurrentUser);
 
             if (results == null)
                 return 0;
@@ -26,25 +27,35 @@ namespace EmailChecker
 
             foreach (SearchResult result in results)
             {
-                // Get the email property from AD
-                if (result.Properties["mail"].Count > 0)
+                if (getCurrentUser)
                 {
-                    foreach (string email in result.Properties["mail"])
-                    {
-                        if (!String.IsNullOrWhiteSpace(email) && emails.Add(email))
-                            Console.WriteLine(email);
-                    }
+                    Console.WriteLine(result.Properties["samAccountName"][0]);
+                    Console.WriteLine(result.Properties["cn"][0]);
+                    Console.WriteLine(result.Properties["mail"].Count > 0 ? result.Properties["mail"][0] : "");
+                    return 0;
                 }
-
-                // Also check for emails in proxyaddresses
-                foreach (string proxyAddr in result.Properties["proxyaddresses"])
+                else
                 {
-                    // Make it 'case-insensative'
-                    if (!String.IsNullOrWhiteSpace(proxyAddr) && proxyAddr.ToLower().StartsWith("smtp:"))
+                    // Get the email property from AD
+                    if (result.Properties["mail"].Count > 0)
                     {
-                        string email = proxyAddr.Substring(5);
-                        if (emails.Add(email))
-                            Console.WriteLine(email);
+                        foreach (string email in result.Properties["mail"])
+                        {
+                            if (!String.IsNullOrWhiteSpace(email) && emails.Add(email))
+                                Console.WriteLine(email);
+                        }
+                    }
+
+                    // Also check for emails in proxyaddresses
+                    foreach (string proxyAddr in result.Properties["proxyaddresses"])
+                    {
+                        // Make it 'case-insensative'
+                        if (!String.IsNullOrWhiteSpace(proxyAddr) && proxyAddr.ToLower().StartsWith("smtp:"))
+                        {
+                            string email = proxyAddr.Substring(5);
+                            if (emails.Add(email))
+                                Console.WriteLine(email);
+                        }
                     }
                 }
             }
@@ -52,14 +63,16 @@ namespace EmailChecker
             return 0;
         }
 
-        static SearchResultCollection GetUser(string query)
+        static SearchResultCollection FindUsers(string query, bool exactUsernameMatch)
         {
             string domainName = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
             string splitName = String.Join(",", domainName.Split('.').Select(part => "DC=" + part));
 
             //Set the correct format for the AD query and filter
             string rootQuery = String.Format(@"LDAP://{0}/{1}", domainName, splitName);
-            string userQuery = String.Format(@"(&(objectCategory=person)(objectClass=user)(|(cn={0}*)(mail={0}*)(samAccountName={0}*)))", query);
+            string userQuery = String.Format(exactUsernameMatch
+                ? @"(&(objectCategory=person)(objectClass=user)(samAccountName={0}))"
+                : @"(&(objectCategory=person)(objectClass=user)(|(cn={0}*)(mail={0}*)(samAccountName={0}*)))", query);
 
             using (DirectoryEntry root = new DirectoryEntry(rootQuery))
             {
