@@ -22,6 +22,8 @@ namespace EmailChecker
             if (results == null)
                 return 0;
 
+            HashSet<string> emails = new HashSet<string>();
+
             foreach (SearchResult result in results)
             {
                 // Get the email property from AD
@@ -29,7 +31,7 @@ namespace EmailChecker
                 {
                     foreach (string email in result.Properties["mail"])
                     {
-                        if (!String.IsNullOrWhiteSpace(email))
+                        if (!String.IsNullOrWhiteSpace(email) && emails.Add(email))
                             Console.WriteLine(email);
                     }
                 }
@@ -39,7 +41,11 @@ namespace EmailChecker
                 {
                     // Make it 'case-insensative'
                     if (!String.IsNullOrWhiteSpace(proxyAddr) && proxyAddr.ToLower().StartsWith("smtp:"))
-                        Console.WriteLine(proxyAddr.Substring(5));
+                    {
+                        string email = proxyAddr.Substring(5);
+                        if (emails.Add(email))
+                            Console.WriteLine(email);
+                    }
                 }
             }
 
@@ -53,7 +59,7 @@ namespace EmailChecker
 
             //Set the correct format for the AD query and filter
             string rootQuery = String.Format(@"LDAP://{0}/{1}", domainName, splitName);
-            string userQuery = String.Format(@"(&(objectCategory=person)(objectClass=user)(|(cn={0}*)(samAccountName={0}*)))", query);
+            string userQuery = String.Format(@"(&(objectCategory=person)(objectClass=user)(|(cn={0}*)(mail={0}*)(samAccountName={0}*)))", query);
 
             using (DirectoryEntry root = new DirectoryEntry(rootQuery))
             {
